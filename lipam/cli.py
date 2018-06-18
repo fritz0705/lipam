@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import itertools
+import json
 import os
 import subprocess
 import sys
@@ -14,12 +15,10 @@ import lglass.nic
 import lglass.whois.engine
 import lglass.whois.server
 
-from lipam.ipam import *
+import lipam.ipam
 
 
 class IPAMTool(object):
-    Database = FileDatabase
-
     def __init__(self, stdin=None, stdout=None, stderr=None, editor=None):
         if stdin is None:
             stdin = sys.stdin
@@ -38,6 +37,7 @@ class IPAMTool(object):
             add_padding=0)
         self.argparser = argparse.ArgumentParser()
         self.argparser.add_argument("--database", "-D", default=".")
+        self.argparser.add_argument("--database-type", default="file")
         self.argparser.add_argument("--verbose", "-v", action="store_true",
                                     default=False)
         self.argparser.add_argument('--editor')
@@ -283,12 +283,44 @@ class IPAMTool(object):
         whois_server_parser.add_argument(
             "--address", "-a", default="::1,127.0.0.1")
 
+    def _apply_config(self, namespace):
+        search_path = ["/etc/lipamrc", os.getenv("HOME") + "/.lipamrc",
+                       os.getenv(
+            "XDG_CONFIG_HOME",
+            os.getenv("HOME") + "/.config")
+            + "/.lipamrc",
+            "./.lipamrc"][::-1]
+        args = None
+        if namespace.config is not None:
+            with open(namespace.config) as fh:
+                args = json.load(fh)
+        else:
+            for p in search_path:
+                try:
+                    with open(p) as fh:
+                        args = json.load(fh)
+                    break
+                except BaseException:
+                    pass
+        if args is not None:
+            return self.argparser.parse_args(args, namespace=namespace)
+        return namespace
+
     def main(self, argv=None):
         # parse cli arguments
         if argv is None:
             argv = sys.argv[1:]
         self.args = self.argparser.parse_args(argv)
+        self.args = self._apply_config(self.args)
         # initialize database
+        if self.args.database_type == "sql":
+            import lipam.sql
+            self.Database = lipam.sql.IPAMDatabase
+        elif self.args.database_type == "file":
+            import lipam.ipam
+            self.Database = lipam.ipam.FileDatabase
+        elif self.args.database_type is not None:
+            pass
         self.database = self.Database(self.args.database)
         sc = self.args.subcommand
         if sc == "add-inverse":
@@ -325,9 +357,6 @@ class IPAMTool(object):
             return self.whois_server()
         else:
             self.argparser.print_usage()
-
-    def load_config(self):
-        pass
 
     def add_object(self):
         objs = []
@@ -504,7 +533,7 @@ class IPAMTool(object):
                            not lglass.dns.domain_equal(domain_name, dom)))
         if self.args.fqdn:
             hosts = set(hostname for _, hostname
-                    in db.lookup(classes=("host",))
+                        in db.lookup(classes=("host",))
                         if lglass.dns.is_subdomain(hostname, dom))
         if lglass.dns.is_reverse_domain(dom) or not dom:
             addresses = set(address for _, address
@@ -611,10 +640,10 @@ class IPAMTool(object):
         try:
             self._save_object(nobj)
             self.database.delete(obj)
-        except:
+        except BaseException:
             try:
                 self.database.delete(nobj)
-            except:
+            except BaseException:
                 pass
             finally:
                 self._save_object(obj)
@@ -629,7 +658,7 @@ class IPAMTool(object):
         for term in self.args.terms:
             if inverse_fields is not None:
                 results = eng.query_lazy((inverse_fields, (term,)),
-                        **query_kwargs)
+                                         **query_kwargs)
             else:
                 results = eng.query_lazy(term, **query_kwargs)
             for role, obj in results:
@@ -647,7 +676,7 @@ class IPAMTool(object):
                     continue
                 elif role == 'primary':
                     self.print(
-                            "% Information related to '{}'".format(primary_key))
+                        "% Information related to '{}'".format(primary_key))
                     self.print()
                 self.print_object(obj)
 
