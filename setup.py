@@ -28,6 +28,9 @@ setuptools.setup(
             'lipam = lipam.cli:main'
         ]
     },
+    extras_require={
+        'SQL': ['lglass-sql']
+    },
     package_data={
     }
 )
