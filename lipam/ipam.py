@@ -57,6 +57,8 @@ class HostObject(lglass.nic.NicObject):
             yield ("ipv6-prefix", ipv6prefix.lower())
         for address in self.get("address"):
             yield ("address", address.lower())
+        for address in self.ipv6_slaacs():
+            yield ("address", address.lower())
 
 
 class AddressObject(lglass.nic.NicObject):
