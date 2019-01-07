@@ -139,6 +139,17 @@ class IPAMTool(object):
             "--no-template", action="store_false", dest="template")
         create_object_parser.add_argument("object_class")
         create_object_parser.add_argument("object_key", nargs="?")
+        # lipam delete-host hostname
+        delete_host_parser = self.command_parsers.add_parser(
+            "delete-host", aliases=["rm-host"])
+        delete_host_parser.add_argument("--delete-addresses",
+                                        action="store_true", default=True)
+        delete_host_parser.add_argument("--no-delete-addresses", "-A",
+                                        action="store_false", dest="delete_addresses")
+        delete_host_parser.add_argument("--address-mode",
+                                        choices=["only", "any", "primary"],
+                                        default="only")
+        delete_host_parser.add_argument("hostname")
         # lipam delete-object OBJECT_CLASS OBJECT_KEY
         delete_object_parser = self.command_parsers.add_parser(
             'delete-object', aliases=['delete', 'rm'])
@@ -265,18 +276,18 @@ class IPAMTool(object):
         list_network_parser.add_argument('network')
         # lipam rename-object object_class old_object_key new_object_key
         rename_object_parser = self.command_parsers.add_parser(
-                "rename-object",
-               aliases=["rename", "move", "move-object"])
+            "rename-object",
+            aliases=["rename", "move", "move-object"])
         rename_object_parser.add_argument("object_class")
         rename_object_parser.add_argument("old_object_key")
         rename_object_parser.add_argument("new_object_key")
         # lipam rename-host old_hostname new_hostname
         rename_host_parser = self.command_parsers.add_parser("rename-host",
-                aliases=["move-host"])
+                                                             aliases=["move-host"])
         rename_host_parser.add_argument("--addresses", action="store_true",
-                default=True)
+                                        default=True)
         rename_host_parser.add_argument("--no-addresses", action="store_false",
-                dest="addresses")
+                                        dest="addresses")
         rename_host_parser.add_argument("old_hostname")
         rename_host_parser.add_argument("new_hostname")
         # lipam renumber old_ip_address new_ip_address
@@ -345,7 +356,9 @@ class IPAMTool(object):
             return self.create_inetnum()
         elif sc in {"create-object", "create"}:
             return self.create_object()
-        elif sc in {"delete-object", "delete"}:
+        elif sc in {"delete-host", "rm-host"}:
+            return self.delete_host()
+        elif sc in {"delete-object", "delete", "rm"}:
             return self.delete_object()
         elif sc in {"edit-object", "edit"}:
             return self.edit_object()
@@ -499,6 +512,24 @@ class IPAMTool(object):
         if self.args.edit:
             obj = self._edit_object(obj)
         self._save_object(obj)
+
+    def delete_host(self):
+        obj = self.database.fetch("host", self.args.hostname)
+        if self.args.delete_addresses:
+            for address in obj.addresses:
+                try:
+                    address_obj = self.database.fetch("address", address)
+                except KeyError:
+                    continue
+                delete_addr = (self.args.address_mode == "only" and
+                               address_obj.hostnames == [obj.object_key]) or \
+                    (self.args.address_mode == "any" and
+                     obj.object_key in address_obj.hostnames) or \
+                    (self.args.address_mode == "primary" and
+                     address_obj.primary_hostname == obj.object_key)
+                if delete_addr:
+                    self.database.delete(address_obj)
+        self.database.delete(obj)
 
     def delete_object(self):
         obj = self.database.fetch(self.args.object_class, self.args.object_key)
