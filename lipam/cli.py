@@ -264,11 +264,21 @@ class IPAMTool(object):
                                          dest="hosts")
         list_network_parser.add_argument('network')
         # lipam rename-object object_class old_object_key new_object_key
-        rename_object_parser = self.command_parsers.add_parser("rename-object",
-                                                               aliases=["rename", "move", "move-object"])
+        rename_object_parser = self.command_parsers.add_parser(
+                "rename-object",
+               aliases=["rename", "move", "move-object"])
         rename_object_parser.add_argument("object_class")
         rename_object_parser.add_argument("old_object_key")
         rename_object_parser.add_argument("new_object_key")
+        # lipam rename-host old_hostname new_hostname
+        rename_host_parser = self.command_parsers.add_parser("rename-host",
+                aliases=["move-host"])
+        rename_host_parser.add_argument("--addresses", action="store_true",
+                default=True)
+        rename_host_parser.add_argument("--no-addresses", action="store_false",
+                dest="addresses")
+        rename_host_parser.add_argument("old_hostname")
+        rename_host_parser.add_argument("new_hostname")
         # lipam renumber old_ip_address new_ip_address
         renumber_parser = self.command_parsers.add_parser("renumber")
         renumber_parser.add_argument("old_ip_address")
@@ -351,6 +361,8 @@ class IPAMTool(object):
             return self.list_network()
         elif sc in {"move", "move-object", "rename", "rename-object"}:
             return self.rename_object()
+        elif sc in {"move-host", "rename-host"}:
+            return self.rename_host()
         elif sc == "whois":
             return self.whois()
         elif sc == "whois-server":
@@ -649,6 +661,38 @@ class IPAMTool(object):
                 self._save_object(obj)
             raise
 
+    def rename_host(self):
+        obj = self.database.fetch("host", self.args.old_hostname)
+        nobj = obj.copy()
+        nobj.object_key = self.args.new_hostname
+        rel = []
+        nrel = []
+        if self.args.addresses:
+            for address in obj.addresses:
+                try:
+                    address_obj = self.database.fetch("address", address)
+                except KeyError:
+                    continue
+                naddress_obj = address_obj.copy()
+                naddress_obj.primary_host = self.args.new_hostname
+                rel.append(address_obj)
+                nrel.append(naddress_obj)
+        try:
+            self._save_object(nobj)
+            for no in nrel:
+                self._save_object(no)
+            self.database.delete(obj)
+        except BaseException:
+            try:
+                self.database.delete(nobj)
+            except BaseException:
+                pass
+            finally:
+                self._save_object(nobj)
+                for o in rel:
+                    self._save_object(o)
+            raise
+
     def whois(self):
         eng = self.whois_engine()
         query_kwargs = lglass.whois.engine.args_to_query_kwargs(self.args)
@@ -716,7 +760,7 @@ class IPAMTool(object):
                     obj.pretty_print(
                         **self.pretty_print_options)).encode())
             fh.write("% Uncomment the next line to abort process\n".encode())
-            fh.write("% abort:   abort\n".encode())
+            fh.write("% abort:         abort\n".encode())
             fh.flush()
             argv = [editor, fh.name]
             subprocess.run(argv)
