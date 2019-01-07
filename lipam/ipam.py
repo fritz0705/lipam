@@ -106,11 +106,11 @@ class AddressObject(lglass.nic.NicObject):
 
     @property
     def primary_host(self):
-        return self["host"]
+        return self["hostname"]
 
     @primary_host.setter
     def primary_host(self, new_host):
-        self["host"] = new_host
+        self["hostname"] = new_host
 
     @property
     def status(self):
