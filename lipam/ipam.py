@@ -121,12 +121,12 @@ class AddressObject(lglass.nic.NicObject):
 
     @property
     def inverse_keys(self):
-        return super().inverse_keys + ["host", "l2-address"]
+        return super().inverse_keys + ["hostname", "l2-address"]
 
     def inverse_fields(self):
         yield from super().inverse_fields()
-        for host in self.get("host"):
-            yield ("host", host)
+        for host in self.get("hostname"):
+            yield ("hostname", host)
         for l2addr in self.get("l2-address"):
             yield ("l2-address", l2addr.lower())
 
