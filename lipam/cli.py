@@ -177,6 +177,8 @@ class IPAMTool(object):
         generate_dns_parser.add_argument('--no-fqdn', action='store_false',
                                          dest='fqdn')
         generate_dns_parser.add_argument('--l2-address-rrtype', default='TXT')
+        generate_dns_parser.add_argument('--eui48-rrtype', default='EUI48')
+        generate_dns_parser.add_argument('--eui64-rrtype', default='EUI64')
         generate_dns_parser.add_argument('--ipv4', action='store_true',
                                          default=True)
         generate_dns_parser.add_argument('--no-ipv4', action='store_false',
@@ -622,9 +624,15 @@ class IPAMTool(object):
                         hostname=host.object_key,
                         address=addr))
             for l2_address in host.l2_addresses:
-                self.print("{hostname}. {rrtype} \"{address}\"".format(
+                rrtype = self.args.l2_address_rrtype
+                if isinstance(l2_address, netaddr.EUI):
+                    if l2_address.version == 64:
+                        rrtype = self.args.eui64_rrtype
+                    elif l2_address.version == 48:
+                        rrtype = self.args.eui48_rrtype
+                self.print("{hostname}. {rrtype} {address}".format(
                     hostname=host.object_key,
-                    rrtype=self.args.l2_address_rrtype,
+                    rrtype=rrtype,
                     address=l2_address))
             if self.args.custom_records:
                 for rr in host.get("rr"):
